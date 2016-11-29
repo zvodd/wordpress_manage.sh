@@ -79,6 +79,8 @@ if [ -e "$config" ]; then
     dumpfile=$(extract_config dumpfile)
     echo "# dumpfile = $dumpfile"
     sitedomain=$(extract_config sitedomain)
+    mysqluser=$(extract_config mysqluser)
+    mysqluserpw=$(extract_config mysqluserpw)
 
     # check for mysqlpath in "wp_manage.conf" and add to execution path.
     mysqlpath=$(extract_config mysqlpath)
@@ -104,8 +106,8 @@ fi
 ###########################
 
 init_mysql_settings() {
-    mysqluser=$(extract_config mysqluser)
-    mysqluserpw=$(extract_config mysqluserpw)
+    # mysqluser=$(extract_config mysqluser)
+    # mysqluserpw=$(extract_config mysqluserpw)
 
     wp_folder="$sitefolder"
     db_file="$dumpfile"
@@ -121,7 +123,7 @@ init_mysql_settings() {
 
 do_db_dump (){
     init_mysql_settings
-    mysqldump "$mydb" -u"$myuser" -p"$mypass" > $dumpfile 2>/devnull
+    mysqldump "$mydb" -u"$myuser" -p"$mypass" --opt --skip-dump-date --order-by-primary | sed 's$VALUES ($VALUES\n($g' | sed 's$),($),\n($g' > $dumpfile 2>/devnull
 }
 
 do_import_mysql () {
@@ -230,35 +232,36 @@ print_help(){
     echo ""
     echo "###########################################################"
     echo ""
-    echo "This script relies on the file 'wp_manage.conf'"
-    echo "That will be executed as a bash script internally,"
-    echo "to set the following  required environment variables:"
+    echo "# wp_manage.sh relies on the file 'wp_manage.conf'"
+    echo "# That will be executed as a bash script internally,"
+    echo "# to set the following required variables."
+    echo "# Copy , paste, then edit this section into 'wp_manage.conf'"
     echo ""
-    echo "#Directory containing 'mysql' and 'mysqldump'"
-    echo "#Only necessary when mysql is not on \$PATH, i.e. on Windows"
-    echo "mysqlpath=/usr/bin"
+    echo "# Directory containing 'mysql' and 'mysqldump'"
+    echo "# Only necessary when mysql is not on \$PATH, i.e. on Windows"
+    echo "mysqlpath=\"/c/Program Files (x86)/mysql/bin\""
     echo ""
     echo "# mysql root username"
-    echo "mysqluser=root"
+    echo "mysqluser=\"root\""
     echo ""
-    echo "#mysql root password"
-    echo "mysqluserpw=mysql"
+    echo "# mysql root password"
+    echo "mysqluserpw=\"mysql\""
     echo ""
     echo "# wordpress directory path "
-    echo "sitefolder=./site/public_html/wordpress"
+    echo "sitefolder=\"./site/public_html/wordpress\""
     echo ""
     echo "# filepath for database dump"
-    echo "dumpfile=./database.sql"
+    echo "dumpfile=\"./database.sql\""
     echo ""
     echo "# domain name (not including 'www') for wordpress site."
-    echo "sitedomain=example.com"
+    echo "sitedomain=\"example.com\""
     echo ""
     echo "###########################################################"
     echo ""
     echo "On msys in windows (i.e. git for windows):"
     echo "This script requires 'unix2dos' and 'dos2unix',"
     echo "for converting line endings."
-    echo "May need to download and add these to your path manually."
+    echo "You may need to download and add these to your path manually."
     echo ""
 }
 
@@ -302,7 +305,8 @@ case "$1" in
     echo sitefolder=$sitefolder
     echo dumpfile=$dumpfile
     echo sitedomain=$sitedomain
-    echo print_help
+    echo ""
+    print_help
     exit 1
     ;;
 esac

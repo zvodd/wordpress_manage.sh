@@ -104,8 +104,8 @@ fi
 ###########################
 
 init_mysql_settings() {
-    mysqlroot=$(extract_config mysqlroot)
-    mysqlrootpw=$(extract_config mysqlrootpw)
+    mysqluser=$(extract_config mysqluser)
+    mysqluserpw=$(extract_config mysqluserpw)
 
     wp_folder="$sitefolder"
     db_file="$dumpfile"
@@ -126,19 +126,19 @@ do_db_dump (){
 
 do_import_mysql () {
     init_mysql_settings 
-    echo "exit" | mysql -u"$mysqlroot" -p"$mysqlrootpw" 2> /dev/null
+    echo "exit" | mysql -u"$mysqluser" -p"$mysqluserpw" 2> /dev/null
     if [ "$?" -gt 0 ]; then
         echo "Failed to login to mysql database as root"
         exit 1
     fi
 
     #check for user and create if needed
-    echo "SELECT User FROM mysql.user;" | mysql -u"$mysqlroot" -p"$mysqlrootpw" 2> /dev/null | grep "$myuser" > /dev/null 2>&1
+    echo "SELECT User FROM mysql.user;" | mysql -u"$mysqluser" -p"$mysqluserpw" 2> /dev/null | grep "$myuser" > /dev/null 2>&1
     if [ "$?" -gt 0 ]; then
         echo "# User '""$myuser""' not found"
 
-        echo "CREATE USER '""$myuser""'@'localhost' IDENTIFIED BY '""$mypass""';" | mysql -u"$mysqlroot" -p"$mysqlrootpw" 2> /dev/null
-        echo "GRANT ALL ON ""$mydb"".* TO '""$myuser""'@'localhost';" | mysql -u"$mysqlroot" -p"$mysqlrootpw" 2> /dev/null
+        echo "CREATE USER '""$myuser""'@'localhost' IDENTIFIED BY '""$mypass""';" | mysql -u"$mysqluser" -p"$mysqluserpw" 2> /dev/null
+        echo "GRANT ALL ON ""$mydb"".* TO '""$myuser""'@'localhost';" | mysql -u"$mysqluser" -p"$mysqluserpw" 2> /dev/null
         
         echo "# Created user '""$myuser""' with ALL privileges to database"
     else
@@ -147,7 +147,7 @@ do_import_mysql () {
 
     #user selections
     mydbdodrop=1
-    echo "USE ""$mydb"";" | mysql -u"$mysqlroot" -p"$mysqlrootpw" 2>&1 | grep "ERROR" > /dev/null 2>&1
+    echo "USE ""$mydb"";" | mysql -u"$mysqluser" -p"$mysqluserpw" 2>&1 | grep "ERROR" > /dev/null 2>&1
     if [ "$?" -gt 0 ]; then
         echo "# Database '""$mydb""' already exists"
         echo "# Drop the Database? [yes|no]"
@@ -174,15 +174,15 @@ do_import_mysql () {
         echo "# Database '""$mydb""' doesn't exist"
     fi
 
-    echo "USE ""$mydb"";" | mysql -u"$mysqlroot" -p"$mysqlrootpw" 2>&1 | grep "ERROR" > /dev/null 2>&1
+    echo "USE ""$mydb"";" | mysql -u"$mysqluser" -p"$mysqluserpw" 2>&1 | grep "ERROR" > /dev/null 2>&1
     if [ "$?" -eq 0 ]; then
         #create DB
         echo "creating database '""$mydb""'"
-        echo "CREATE DATABASE $mydb;" | mysql -u"$mysqlroot" -p"$mysqlrootpw" > /dev/null 2>&1 
+        echo "CREATE DATABASE $mydb;" | mysql -u"$mysqluser" -p"$mysqluserpw" > /dev/null 2>&1 
     fi
     # Bash's Process Substitution doesn't work in windows...
     REALLYBIGSTRING=$(echo "USE ""$mydb"";" && cat "$dumpfile")
-    echo "$REALLYBIGSTRING" | mysql -u"$mysqlroot" -p"$mysqlrootpw" > /dev/null 2>&1
+    echo "$REALLYBIGSTRING" | mysql -u"$mysqluser" -p"$mysqluserpw" > /dev/null 2>&1
 
 
     exit 0
@@ -239,10 +239,10 @@ print_help(){
     echo "mysqlpath=/usr/bin"
     echo ""
     echo "# mysql root username"
-    echo "mysqlroot=root"
+    echo "mysqluser=root"
     echo ""
     echo "#mysql root password"
-    echo "mysqlrootpw=mysql"
+    echo "mysqluserpw=mysql"
     echo ""
     echo "# wordpress directory path "
     echo "sitefolder=./site/public_html/wordpress"
@@ -294,7 +294,15 @@ case "$1" in
     echo hostsfile=$hostsfile
     echo lineconvert=$lineconvert
     echo revlineconvert=$revlineconvert
-    print_help
+    echo ""
+    echo "___ Loaded Config ___"
+    echo mysqlpath=$mysqlpath
+    echo mysqluser=$mysqluser
+    echo mysqluserpw=$mysqluserpw
+    echo sitefolder=$sitefolder
+    echo dumpfile=$dumpfile
+    echo sitedomain=$sitedomain
+    echo print_help
     exit 1
     ;;
 esac

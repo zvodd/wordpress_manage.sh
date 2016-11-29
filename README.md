@@ -1,12 +1,12 @@
 ### Usage
 
- 'wp_manage.sh dump'
+ * 'wp_manage.sh dump'
     Dumps database to 'database.sql',
     using credentials from 'wp_manage.conf' and 'wp-config.php'
- 'wp_manage.sh importdb'
+ * 'wp_manage.sh importdb'
     Imports database from 'database.sql',
     using credentials from 'wp_manage.conf' and 'wp-config.php'
- 'wp_manage.sh hosts'
+ * 'wp_manage.sh hosts'
     Looks for dns entries in 'hosts' file,
     adds or removes depending on comment '#wp_manage_entry'
 
@@ -42,6 +42,5 @@ sitedomain="example.com"
 ### Pre-Install
 
 On msys in windows (i.e. git for windows):
-This script requires 'unix2dos' and 'dos2unix',
-for converting line endings.
+This script requires 'unix2dos' and 'dos2unix', for converting line endings.
 You may need to download and add these to your path manually.

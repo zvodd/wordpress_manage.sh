@@ -13,6 +13,7 @@ extract_wpconf_value (){
     cat $file | grep -i "define('$field'" | cut -f4 -d"'"
 }
 
+# Is this needed?
 convert_winpath () {
     # convert Windows path to Unix path
     # 2 Steps: 1) Swaps slashes. 2) Replace "X:" with "/X".
@@ -76,11 +77,11 @@ config="wp_manage.conf"
 if [ -e "$config" ]; then
     sitefolder=$(extract_config sitefolder)
     echo "# sitefolder = $sitefolder"
-    dumpfile=$(extract_config dumpfile)
-    echo "# dumpfile = $dumpfile"
+    dbdumpfile=$(extract_config dbdumpfile)
+    echo "# dbdumpfile = $dbdumpfile"
     sitedomain=$(extract_config sitedomain)
-    mysqluser=$(extract_config mysqluser)
-    mysqluserpw=$(extract_config mysqluserpw)
+    mysql_su=$(extract_config mysql_su)
+    mysql_su_pw=$(extract_config mysql_su_pw)
 
     # check for mysqlpath in "wp_manage.conf" and add to execution path.
     mysqlpath=$(extract_config mysqlpath)
@@ -105,93 +106,107 @@ fi
 ## Main Config Functions ##
 ###########################
 
+# Pull database settings config from "wp-config.php" in $sitefolder
 init_mysql_settings() {
-    # mysqluser=$(extract_config mysqluser)
-    # mysqluserpw=$(extract_config mysqluserpw)
+    # mysql_su=$(extract_config mysql_su)
+    # mysql_su_pw=$(extract_config mysql_su_pw)
 
     wp_folder="$sitefolder"
-    db_file="$dumpfile"
+    dbdumpfile="$dbdumpfile"
     wpconfig="$wp_folder""/wp-config.php"
     mydb=$(extract_wpconf_value "$wpconfig" "DB_NAME")
     myuser=$(extract_wpconf_value "$wpconfig" "DB_USER")
     mypass=$(extract_wpconf_value "$wpconfig" "DB_PASSWORD")
+
+    #all settings should be checked before proceeding?
 }
 
 ############################
 ## Main Command Functions ##
 ############################
 
-do_db_dump (){
+command_db_dump()
+{
     init_mysql_settings
-    mysqldump "$mydb" -u"$myuser" -p"$mypass" --opt --skip-dump-date --order-by-primary | sed 's$VALUES ($VALUES\n($g' | sed 's$),($),\n($g' > $dumpfile 2>/devnull
+    function_db_dump "$dbdumpfile"
 }
 
-do_import_mysql () {
+function_db_dump(){
+    local dumpdest="$1"
+    mysqldump "$mydb" -u"$myuser" -p"$mypass" --opt --skip-dump-date --order-by-primary | sed 's$VALUES ($VALUES\n($g' | sed 's$),($),\n($g' > "$dumpdest" 2> /devnull
+}
+
+function_does_db_exist(){
+    local true=0
+    local false=1
+    local db_exists="$false"
+    ## check database exists
+    echo "USE ""$mydb"";" | mysql -u"$mysql_su" -p"$mysql_su_pw" 2>&1 | grep "ERROR" > /dev/null 2>&1
+    if [ "$?" -gt 0 ]; then
+        db_exists="$true"
+    fi
+    return "$db_exists"
+}
+
+command_import_mysql () {
     init_mysql_settings 
-    echo "exit" | mysql -u"$mysqluser" -p"$mysqluserpw" 2> /dev/null
+    echo "exit" | mysql -u"$mysql_su" -p"$mysql_su_pw" 2> /dev/null
     if [ "$?" -gt 0 ]; then
         echo "Failed to login to mysql database as root"
         exit 1
     fi
 
     #check for user and create if needed
-    echo "SELECT User FROM mysql.user;" | mysql -u"$mysqluser" -p"$mysqluserpw" 2> /dev/null | grep "$myuser" > /dev/null 2>&1
+    echo "SELECT User FROM mysql.user;" | mysql -u"$mysql_su" -p"$mysql_su_pw" 2> /dev/null | grep "$myuser" > /dev/null 2>&1
     if [ "$?" -gt 0 ]; then
         echo "# User '""$myuser""' not found"
 
-        echo "CREATE USER '""$myuser""'@'localhost' IDENTIFIED BY '""$mypass""';" | mysql -u"$mysqluser" -p"$mysqluserpw" 2> /dev/null
-        echo "GRANT ALL ON ""$mydb"".* TO '""$myuser""'@'localhost';" | mysql -u"$mysqluser" -p"$mysqluserpw" 2> /dev/null
+        echo "CREATE USER '""$myuser""'@'localhost' IDENTIFIED BY '""$mypass""';" | mysql -u"$mysql_su" -p"$mysql_su_pw" 2> /dev/null
+        echo "GRANT ALL ON ""$mydb"".* TO '""$myuser""'@'localhost';" | mysql -u"$mysql_su" -p"$mysql_su_pw" 2> /dev/null
         
         echo "# Created user '""$myuser""' with ALL privileges to database"
     else
         echo "# User '""$myuser""' found"
     fi
 
-    #user selections
-    mydbdodrop=1
-    echo "USE ""$mydb"";" | mysql -u"$mysqluser" -p"$mysqluserpw" 2>&1 | grep "ERROR" > /dev/null 2>&1
-    if [ "$?" -gt 0 ]; then
+    
+    if function_does_db_exist; then
         echo "# Database '""$mydb""' already exists"
         echo "# Drop the Database? [yes|no]"
         yesnochoose
         case "$?" in 
             0)
-            mydbdodrop=0
             echo "# Database Will Be Dropped by Import"
-            mydbbackup="databasebackup.sql"
-            tmpdbf="$dumpfile"
-            dumpfile="$mydbbackup"
-            do_db_dump
-            dumpfile="$tmpdbf"
-            echo "# Database backed up to '""$dumpfile""'"
-
+            local tmptime=$(date +"%H.%M.%S_%d-%h-%y")
+            local dumpdest="db_bak_wpmanage_$tmptime.sql"
+            function_db_dump "$dumpdest"
+            echo "# Database backed up to '""$dbdumpfile""'"
             ;;
             *)
-            mydbdodrop=1
             echo "# Database Left Intact. Nothing left to do."
             exit 0 
             ;;
         esac
     else
-        echo "# Database '""$mydb""' doesn't exist"
+        echo "# Database '""$mydb""' doesn't exist."
     fi
 
-    echo "USE ""$mydb"";" | mysql -u"$mysqluser" -p"$mysqluserpw" 2>&1 | grep "ERROR" > /dev/null 2>&1
-    if [ "$?" -eq 0 ]; then
+    
+    if function_does_db_exist; then
         #create DB
         echo "creating database '""$mydb""'"
-        echo "CREATE DATABASE $mydb;" | mysql -u"$mysqluser" -p"$mysqluserpw" > /dev/null 2>&1 
+        echo "CREATE DATABASE $mydb;" | mysql -u"$mysql_su" -p"$mysql_su_pw" > /dev/null 2>&1 
     fi
     # Bash's Process Substitution doesn't work in windows...
-    REALLYBIGSTRING=$(echo "USE ""$mydb"";" && cat "$dumpfile")
-    echo "$REALLYBIGSTRING" | mysql -u"$mysqluser" -p"$mysqluserpw" > /dev/null 2>&1
+    REALLYBIGSTRING=$(echo "USE ""$mydb"";" && cat "$dbdumpfile")
+    echo "$REALLYBIGSTRING" | mysql -u"$mysql_su" -p"$mysql_su_pw" > /dev/null 2>&1
 
 
     exit 0
 }
 
 
-do_hosts_switch(){
+command_hosts_switch(){
     sitedomain=$1
     entry_comment="#wp_manage_entry"
 
@@ -219,7 +234,7 @@ do_hosts_switch(){
 }
 
 print_help(){
-    echo " usage:"
+    echo " Usage:"
     echo " 'wp_manage.sh dump'"
     echo "    Dumps database to 'database.sql',"
     echo "    using credentials from 'wp_manage.conf' and 'wp-config.php'"
@@ -229,39 +244,29 @@ print_help(){
     echo " 'wp_manage.sh hosts'"
     echo "    Looks for dns entries in 'hosts' file,"
     echo "    adds or removes depending on comment '#wp_manage_entry'"
+    echo " 'wp_manage.sh [showconfig|config]'"
+    echo "    prints the loaded configuration. "
+    echo " 'wp_manage.sh [h|-h|help|-help|*]'"
+    echo "    prints this help message."
     echo ""
-    echo "###########################################################"
+
+}
+
+print_config(){
+    echo "___ Current Configuration ___"
+    echo osenv=\"$osenv\"
+    echo windows_root=\"$windows_root\"
+    echo hostsfile=\"$hostsfile\"
+    echo lineconvert=\"$lineconvert\"
+    echo revlineconvert=\"$revlineconvert\"
     echo ""
-    echo "# wp_manage.sh relies on the file 'wp_manage.conf'"
-    echo "# That will be executed as a bash script internally,"
-    echo "# to set the following required variables."
-    echo "# Copy , paste, then edit this section into 'wp_manage.conf'"
-    echo ""
-    echo "# Directory containing 'mysql' and 'mysqldump'"
-    echo "# Only necessary when mysql is not on \$PATH, i.e. on Windows"
-    echo "mysqlpath=\"/c/Program Files (x86)/mysql/bin\""
-    echo ""
-    echo "# mysql root username"
-    echo "mysqluser=\"root\""
-    echo ""
-    echo "# mysql root password"
-    echo "mysqluserpw=\"mysql\""
-    echo ""
-    echo "# wordpress directory path "
-    echo "sitefolder=\"./site/public_html/wordpress\""
-    echo ""
-    echo "# filepath for database dump"
-    echo "dumpfile=\"./database.sql\""
-    echo ""
-    echo "# domain name (not including 'www') for wordpress site."
-    echo "sitedomain=\"example.com\""
-    echo ""
-    echo "###########################################################"
-    echo ""
-    echo "On msys in windows (i.e. git for windows):"
-    echo "This script requires 'unix2dos' and 'dos2unix',"
-    echo "for converting line endings."
-    echo "You may need to download and add these to your path manually."
+    echo "___ Loaded Config ___"
+    echo mysqlpath=\"$mysqlpath\"
+    echo mysql_su=\"$mysql_su\"
+    echo mysql_su_pw=\"$mysql_su_pw\"
+    echo sitefolder=\"$sitefolder\"
+    echo dbdumpfile=\"$dbdumpfile\"
+    echo sitedomain=\"$sitedomain\"
     echo ""
 }
 
@@ -271,41 +276,25 @@ print_help(){
 # call one of the above functions
 case "$1" in
     "dump")
-    echo "# Dumping WordPress DataBase"
-    do_db_dump 
+    echo "# Dumping WordPress database"
+    command_db_dump 
     ;;
     "importdb")
-    do_import_mysql
+    command_import_mysql
     ;;
     "hosts")
     echo "# Hosts Switch"
-    do_hosts_switch $sitedomain $2
-    ;;
-    "cygpath")
-    echo "Unimplemented"
-    #TODO cygpath ???
-    #cygpath $*
+    command_hosts_switch $sitedomain $2
     ;;
     'h'|'-h'|'help'|'-help')
     print_help
     exit 0
     ;;
+    'config'|'showconfig')
+    print_config
+    exit 0
+    ;;
     *)
-    echo "___ Current Configuration ___"
-    echo osenv=$osenv
-    echo windows_root=$windows_root
-    echo hostsfile=$hostsfile
-    echo lineconvert=$lineconvert
-    echo revlineconvert=$revlineconvert
-    echo ""
-    echo "___ Loaded Config ___"
-    echo mysqlpath=$mysqlpath
-    echo mysqluser=$mysqluser
-    echo mysqluserpw=$mysqluserpw
-    echo sitefolder=$sitefolder
-    echo dumpfile=$dumpfile
-    echo sitedomain=$sitedomain
-    echo ""
     print_help
     exit 1
     ;;

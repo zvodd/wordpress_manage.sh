@@ -6,8 +6,8 @@ It also offers a command for quickly importing that database back into the
 local or production server.
 
 It assumes the local development and remote deployment database name and credentials 
-are the same. But that can be resolved by ignoring wp-config in your git repo and 
-separate `wp_manage.conf` files on production vs local.
+are the same. But that can be resolved by git-ignoring `wp-config.php` and `wp_manage.conf`
+and using seperate files for production vs staging.
 
 There is also a function for adding an entry to the hosts file for the Wordpress site domain name.
 

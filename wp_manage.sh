@@ -121,9 +121,9 @@ init_mysql_settings() {
     #all settings should be checked before proceeding?
 }
 
-############################
-## Main Command Functions ##
-############################
+###################
+## Main Commands ##
+###################
 
 command_db_dump()
 {
@@ -140,7 +140,8 @@ function_does_db_exist(){
     local true=0
     local false=1
     local db_exists="$false"
-    ## check database exists
+    # check database exist,
+    # grep returns 1(false) if no match for "ERROR" is found.
     echo "USE ""$mydb"";" | mysql -u"$mysql_su" -p"$mysql_su_pw" 2>&1 | grep "ERROR" > /dev/null 2>&1
     if [ "$?" -gt 0 ]; then
         db_exists="$true"
@@ -211,7 +212,8 @@ command_hosts_switch(){
     entry_comment="#wp_manage_entry"
 
     if [ "$2" == "clean" ]; then
-        cat "$hostsfile" | grep -v "$entry_comment"  | "$lineconvert" > "$hostsfile"
+        # "example\\.com\\s\\#wp_manage_entry"
+        cat "$hostsfile" | grep -v "$sitedomain\\s\\+$entry_comment"  | "$lineconvert" > "$hostsfile"
         echo "# hosts file cleaned of all wp_manage entries"
         exit 0
     fi
@@ -220,11 +222,13 @@ command_hosts_switch(){
     cat "$hostsfile" | grep "$sitedomain" > /dev/null 2>&1
     if [ "$?" -gt 0 ]; then
         # nothing in hosts.
-        #fill in $sitedomain and "www.""$sitedomain"
+        # Add entries "$sitedomain" and "www.$sitedomain"
         echo "# No entries for '$sitedomain' in '$hostsfile"
         # Note ">>" appends to the file, where are ">" would overwrite.
-        echo "  127.0.0.1   $sitedomain $entry_comment" | "$lineconvert" >> "$hostsfile"
-        echo "  127.0.0.1   www.$sitedomain $entry_comment" | "$lineconvert" >> "$hostsfile"
+        # extra line needed in case host file doesn't end with blank line.
+        echo "" | "$lineconvert" >> "$hostsfile"
+        echo "127.0.0.1   $sitedomain $entry_comment" | "$lineconvert" >> "$hostsfile"
+        echo "127.0.0.1   www.$sitedomain $entry_comment" | "$lineconvert" >> "$hostsfile"
         echo "# Hosts entries added to '$hostsfile'"
         exit 0
     else
